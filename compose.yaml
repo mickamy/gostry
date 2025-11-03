@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:18.0-alpine
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h localhost" ]
+      interval: 3s
+      retries: 5
+      start_period: 30s
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres:

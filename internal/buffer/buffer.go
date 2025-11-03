@@ -14,18 +14,18 @@ func NewBuffer[T any]() *Buffer[T] {
 	return &Buffer[T]{}
 }
 
-func (b *Buffer[T]) Add(e T) {
+func (b *Buffer[T]) Add(t T) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.ts = append(b.ts, e)
+	b.ts = append(b.ts, t)
 }
 
 func (b *Buffer[T]) Drain() []T {
 	b.mu.Lock()
-	es := b.ts
+	ts := b.ts
 	b.ts = nil
 	b.mu.Unlock()
-	return es
+	return ts
 }
 
 func (b *Buffer[T]) Reset() {

@@ -72,8 +72,8 @@ func (h *Handler) applyRedact(m map[string]any) map[string]any {
 	return out
 }
 
-// Tx wraps a *sql.Tx and buffers historical entries within the transaction.
-type Tx struct {
+// tx wraps a *sql.Tx and buffers historical entries within the transaction.
+type tx struct {
 	*sql.Tx
 	h   *Handler
 	buf *buffer.Buffer[entry]
@@ -81,19 +81,19 @@ type Tx struct {
 }
 
 // BeginTx starts a wrapped transaction that records DML changes.
-func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
-	tx, err := db.DB.BeginTx(ctx, opts)
+func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*tx, error) {
+	t, err := db.DB.BeginTx(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
-	return &Tx{Tx: tx, h: db.h, buf: buffer.NewBuffer[entry](), ctx: ctx}, nil
+	return &tx{Tx: t, h: db.h, buf: buffer.NewBuffer[entry](), ctx: ctx}, nil
 }
 
 // ExecContext intercepts ExecContext to capture and log DML operations.
 // MVP behavior:
 // - If the statement is INSERT/UPDATE/DELETE with RETURNING, capture row(s) as after/before.
 // - Otherwise, pass-through and record only SQL/args metadata for later (future resolvers).
-func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
+func (t *tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	if dml, ok := query.ParseDML(q); ok {
 		if !dml.HasReturning {
 			// No RETURNING: pass-through; record minimal info.
@@ -128,7 +128,7 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 }
 
 // Commit flushes buffered history records into history tables before commit.
-func (t *Tx) Commit() error {
+func (t *tx) Commit() error {
 	if err := t.flush(); err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (t *Tx) Commit() error {
 }
 
 // flush writes buffered entries into their corresponding history tables within the same transaction.
-func (t *Tx) flush() error {
+func (t *tx) flush() error {
 	rows := t.buf.Drain()
 	if len(rows) == 0 {
 		return nil
@@ -191,7 +191,7 @@ END $$;
 }
 
 // Rollback clears buffered history entries and rolls back the transaction.
-func (t *Tx) Rollback() error {
+func (t *tx) Rollback() error {
 	t.buf.Reset()
 	return t.Tx.Rollback()
 }

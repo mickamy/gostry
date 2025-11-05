@@ -25,7 +25,7 @@ func main() {
 	}(db)
 
 	// Wrap DB with gostry
-	h := gostry.New(gostry.Config{HistorySuffix: "_history"})
+	h := gostry.New(gostry.Config{AutoAttachReturning: true})
 	wdb := h.Wrap(db)
 
 	// Metadata
@@ -44,7 +44,6 @@ func main() {
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO orders(id, customer_id, amount, status)
 VALUES ($1,$2,$3,$4)
-RETURNING *
 `, id, uuid.NewString(), 1200.00, "new"); err != nil {
 		_ = tx.Rollback()
 		log.Fatalf("insert: %v", err)
@@ -54,7 +53,6 @@ RETURNING *
 	if _, err := tx.ExecContext(ctx, `
 UPDATE orders SET status=$1, amount=$2, updated_at=now()
 WHERE id=$3
-RETURNING *
 `, "paid", 1500.00, id); err != nil {
 		_ = tx.Rollback()
 		log.Fatalf("update: %v", err)
@@ -62,7 +60,7 @@ RETURNING *
 
 	// DELETE with RETURNING * (captured as before)
 	if _, err := tx.ExecContext(ctx, `
-DELETE FROM orders WHERE id=$1 RETURNING *
+DELETE FROM orders WHERE id=$1
 `, id); err != nil {
 		_ = tx.Rollback()
 		log.Fatalf("delete: %v", err)

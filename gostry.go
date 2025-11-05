@@ -22,9 +22,10 @@ type RedactMap map[string]RedactFunc
 
 // Config defines the main configuration options for gostry.
 type Config struct {
-	HistorySuffix   string    // e.g. "_history" (default)
-	Redact          RedactMap // optional key-based redaction
-	SkipIfNotExists bool      // skip insertion to history table if it does not exists
+	HistorySuffix       string    // e.g. "_history" (default)
+	Redact              RedactMap // optional key-based redaction
+	SkipIfNotExists     bool      // skip insertion to history table if it does not exists
+	AutoAttachReturning bool      // attempt to append RETURNING * for DML without RETURNING (PostgreSQL only)
 }
 
 func (c Config) HistoryTableName(base string) string {
@@ -100,35 +101,52 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // - Otherwise, pass-through and record only SQL/args metadata for later (future resolvers).
 func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	if dml, ok := query.ParseDML(q); ok {
-		if !dml.HasReturning {
-			// No RETURNING: pass-through; record minimal info.
+		execPlain := func() (sql.Result, error) {
 			res, err := tx.Tx.ExecContext(ctx, q, args...)
 			if err == nil {
 				tx.buf.Add(entry{table: dml.Table, op: dml.Op, sql: q, args: args, meta: extractMeta(ctx)})
 			}
 			return res, err
 		}
-		// Use QueryContext to fetch returned row(s); we only capture the first row for MVP.
-		rows, err := tx.Tx.QueryContext(ctx, q, args...)
-		if err != nil {
-			return nil, err
-		}
-		ms, n, err := scanAll(rows)
-		if err != nil {
-			return nil, fmt.Errorf("gostry: failed to scan rows: %w", err)
-		}
-		me := extractMeta(ctx)
-		for _, m := range ms {
-			e := entry{table: dml.Table, op: dml.Op, meta: me}
-			if dml.Op == "DELETE" {
-				e.before = m
-			} else {
-				e.after = m
-			}
-			tx.buf.Add(e)
-		}
-		return newAffectedRows(n), nil
 
+		stmt := q
+		forcedReturning := false
+		if !dml.HasReturning && tx.h.cfg.AutoAttachReturning {
+			if augmented, ok := query.AppendReturningAll(q); ok {
+				stmt = augmented
+				forcedReturning = true
+			}
+		}
+
+		if dml.HasReturning || forcedReturning {
+			rows, err := tx.Tx.QueryContext(ctx, stmt, args...)
+			if err != nil {
+				if forcedReturning {
+					return execPlain()
+				}
+				return nil, err
+			}
+			ms, n, err := scanAll(rows)
+			if err != nil {
+				if forcedReturning {
+					return execPlain()
+				}
+				return nil, fmt.Errorf("gostry: failed to scan rows: %w", err)
+			}
+			meta := extractMeta(ctx)
+			for _, m := range ms {
+				e := entry{table: dml.Table, op: dml.Op, meta: meta}
+				if dml.Op == "DELETE" {
+					e.before = m
+				} else {
+					e.after = m
+				}
+				tx.buf.Add(e)
+			}
+			return newAffectedRows(n), nil
+		}
+
+		return execPlain()
 	}
 	// Not a recognized DML; just pass-through.
 	return tx.Tx.ExecContext(ctx, q, args...)

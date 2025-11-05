@@ -85,3 +85,53 @@ returning *`,
 		})
 	}
 }
+
+func TestAppendReturningAll(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name string
+		sql  string
+		want string
+		ok   bool
+	}{
+		{
+			name: "simple insert",
+			sql:  "INSERT INTO orders (id) VALUES ($1)",
+			want: "INSERT INTO orders (id) VALUES ($1)\nRETURNING *",
+			ok:   true,
+		},
+		{
+			name: "trim whitespace",
+			sql:  "  UPDATE orders SET status='x'  ",
+			want: "UPDATE orders SET status='x'\nRETURNING *",
+			ok:   true,
+		},
+		{
+			name: "keep semicolon",
+			sql:  "DELETE FROM orders WHERE id=$1;",
+			want: "DELETE FROM orders WHERE id=$1\nRETURNING *;",
+			ok:   true,
+		},
+		{
+			name: "empty string",
+			sql:  "   ",
+			want: "   ",
+			ok:   false,
+		},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := query.AppendReturningAll(tc.sql)
+			if ok != tc.ok {
+				t.Fatalf("AppendReturningAll ok = %t, want %t", ok, tc.ok)
+			}
+			if got != tc.want {
+				t.Fatalf("AppendReturningAll(%q) = %q, want %q", tc.sql, got, tc.want)
+			}
+		})
+	}
+}

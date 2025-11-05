@@ -35,3 +35,29 @@ func ParseDML(q string) (DML, bool) {
 	}
 	return DML{}, false
 }
+
+// AppendReturningAll appends "RETURNING *" to the provided statement if non-empty.
+// It preserves trailing semicolons by re-attaching them after the RETURNING clause.
+func AppendReturningAll(q string) (string, bool) {
+	trimmed := strings.TrimSpace(q)
+	if trimmed == "" {
+		return q, false
+	}
+
+	hasSemicolon := false
+	for strings.HasSuffix(trimmed, ";") {
+		hasSemicolon = true
+		trimmed = strings.TrimSpace(trimmed[:len(trimmed)-1])
+	}
+	if trimmed == "" {
+		return q, false
+	}
+
+	var b strings.Builder
+	b.WriteString(trimmed)
+	b.WriteString("\nRETURNING *")
+	if hasSemicolon {
+		b.WriteString(";")
+	}
+	return b.String(), true
+}

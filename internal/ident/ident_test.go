@@ -61,6 +61,34 @@ func TestHistoryParts(t *testing.T) {
 	}
 }
 
+func TestStripAlias(t *testing.T) {
+	t.Parallel()
+
+	tcs := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "simple", in: "orders", want: "orders"},
+		{name: "with alias", in: "orders o", want: "orders"},
+		{name: "with AS alias", in: "orders AS o", want: "orders"},
+		{name: "schema qualified", in: "public.orders o", want: "public.orders"},
+		{name: "quoted", in: `"Sales"."Orders" so`, want: `"Sales"."Orders"`},
+		{name: "trailing comma", in: "orders,", want: "orders"},
+	}
+
+	for _, tc := range tcs {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := ident.StripAlias(tc.in)
+			if got != tc.want {
+				t.Fatalf("StripAlias(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestQuoteQualified(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,9 @@
 package ident
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
 
 // HistoryParts returns qualified identifier parts with suffix applied to the base table name.
 func HistoryParts(base, suffix string) []string {
@@ -52,6 +55,26 @@ func SplitQualified(ident string) []string {
 	part := strings.TrimSpace(buf.String())
 	parts = append(parts, part)
 	return parts
+}
+
+// StripAlias removes trailing alias tokens from an identifier while preserving quotes.
+func StripAlias(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimRight(s, ",")
+	runes := []rune(s)
+	inQuotes := false
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch r {
+		case '"':
+			inQuotes = !inQuotes
+		default:
+			if !inQuotes && unicode.IsSpace(r) {
+				return strings.TrimSpace(string(runes[:i]))
+			}
+		}
+	}
+	return s
 }
 
 // QuoteQualified renders qualified identifier parts as a SQL identifier.

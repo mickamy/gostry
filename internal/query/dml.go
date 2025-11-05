@@ -3,7 +3,8 @@ package query
 import (
 	"regexp"
 	"strings"
-	"unicode"
+
+	"github.com/mickamy/gostry/internal/ident"
 )
 
 // DML describes a recognized data-changing statement.
@@ -24,31 +25,13 @@ var (
 func ParseDML(q string) (DML, bool) {
 	qs := strings.TrimSpace(q)
 	if m := reInsert.FindStringSubmatch(qs); len(m) == 2 {
-		return DML{Op: "INSERT", Table: normalizeIdentifier(m[1]), HasReturning: reReturning.MatchString(qs)}, true
+		return DML{Op: "INSERT", Table: ident.StripAlias(m[1]), HasReturning: reReturning.MatchString(qs)}, true
 	}
 	if m := reUpdate.FindStringSubmatch(qs); len(m) == 2 {
-		return DML{Op: "UPDATE", Table: normalizeIdentifier(m[1]), HasReturning: reReturning.MatchString(qs)}, true
+		return DML{Op: "UPDATE", Table: ident.StripAlias(m[1]), HasReturning: reReturning.MatchString(qs)}, true
 	}
 	if m := reDelete.FindStringSubmatch(qs); len(m) == 2 {
-		return DML{Op: "DELETE", Table: normalizeIdentifier(m[1]), HasReturning: reReturning.MatchString(qs)}, true
+		return DML{Op: "DELETE", Table: ident.StripAlias(m[1]), HasReturning: reReturning.MatchString(qs)}, true
 	}
 	return DML{}, false
-}
-
-func normalizeIdentifier(s string) string {
-	// Strip trailing commas/aliases if present; keep schema qualification and quotes.
-	s = strings.TrimSpace(s)
-	s = strings.TrimRight(s, ",")
-	inQuotes := false
-	for i := 0; i < len(s); i++ {
-		r := rune(s[i])
-		if r == '"' {
-			inQuotes = !inQuotes
-			continue
-		}
-		if !inQuotes && unicode.IsSpace(r) {
-			return strings.TrimSpace(s[:i])
-		}
-	}
-	return s
 }

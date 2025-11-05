@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/jinzhu/inflection"
 
@@ -26,7 +27,11 @@ type Config struct {
 }
 
 func (c Config) HistoryTableName(base string) string {
-	return base + c.HistorySuffix
+	parts := historyIdentifierParts(base, c.HistorySuffix)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ".")
 }
 
 // Handler is the main entry point that manages gostry behavior.
@@ -108,18 +113,20 @@ func (t *tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 		if err != nil {
 			return nil, err
 		}
-		m, n, err := scanOne(rows)
+		ms, n, err := scanAll(rows)
 		if err != nil {
 			return nil, fmt.Errorf("gostry: failed to scan rows: %w", err)
 		}
-
-		e := entry{table: dml.Table, op: dml.Op, meta: extractMeta(ctx)}
-		if dml.Op == "DELETE" {
-			e.before = m
-		} else {
-			e.after = m
+		me := extractMeta(ctx)
+		for _, m := range ms {
+			e := entry{table: dml.Table, op: dml.Op, meta: me}
+			if dml.Op == "DELETE" {
+				e.before = m
+			} else {
+				e.after = m
+			}
+			t.buf.Add(e)
 		}
-		t.buf.Add(e)
 		return newAffectedRows(n), nil
 
 	}
@@ -156,21 +163,26 @@ func (t *tx) flush() error {
 		}
 
 		// Simple per-row INSERT for MVP; can be batched later.
-		table := t.h.cfg.HistoryTableName(e.table)
+		historyParts := historyIdentifierParts(e.table, t.h.cfg.HistorySuffix)
+		historyIdent := quoteQualifiedIdentifier(historyParts)
+		if historyIdent == "" {
+			return fmt.Errorf("gostry: invalid history table identifier for %q", e.table)
+		}
 		stmt := fmt.Sprintf(`
 INSERT INTO %s (id, operation, operated_at, operated_by, trace_id, reason, before, after)
 VALUES ($1, $2, now(), $3, $4, $5, $6, $7)
-`, t.h.cfg.HistoryTableName(e.table))
+`, historyIdent)
 		if t.h.cfg.SkipIfNotExists {
+			regclass := qualifiedRegclassLiteral(historyParts)
 			stmt = fmt.Sprintf(`
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = '%s') THEN
+    IF to_regclass(%s) IS NOT NULL THEN
         INSERT INTO %s (id, operation, operated_at, operated_by, trace_id, reason, before, after)
         VALUES ($1, $2, now(), $3, $4, $5, $6, $7);
     END IF;
 END $$;
-`, table, table)
+`, regclass, historyIdent)
 		}
 
 		if _, err := t.Tx.ExecContext(
@@ -205,7 +217,8 @@ func pickID(table string, before, after map[string]any) any {
 	if v, ok := after["id"]; ok {
 		return v
 	}
-	singular := inflection.Singular(table)
+	base := baseTableName(table)
+	singular := inflection.Singular(base)
 	singularID := fmt.Sprintf("%s_id", singular)
 	if v, ok := before[singularID]; ok {
 		return v

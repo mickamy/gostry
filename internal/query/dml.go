@@ -3,6 +3,7 @@ package query
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // DML describes a recognized data-changing statement.
@@ -23,24 +24,31 @@ var (
 func ParseDML(q string) (DML, bool) {
 	qs := strings.TrimSpace(q)
 	if m := reInsert.FindStringSubmatch(qs); len(m) == 2 {
-		return DML{Op: "INSERT", Table: normalizeIdent(m[1]), HasReturning: reReturning.MatchString(qs)}, true
+		return DML{Op: "INSERT", Table: normalizeIdentifier(m[1]), HasReturning: reReturning.MatchString(qs)}, true
 	}
 	if m := reUpdate.FindStringSubmatch(qs); len(m) == 2 {
-		return DML{Op: "UPDATE", Table: normalizeIdent(m[1]), HasReturning: reReturning.MatchString(qs)}, true
+		return DML{Op: "UPDATE", Table: normalizeIdentifier(m[1]), HasReturning: reReturning.MatchString(qs)}, true
 	}
 	if m := reDelete.FindStringSubmatch(qs); len(m) == 2 {
-		return DML{Op: "DELETE", Table: normalizeIdent(m[1]), HasReturning: reReturning.MatchString(qs)}, true
+		return DML{Op: "DELETE", Table: normalizeIdentifier(m[1]), HasReturning: reReturning.MatchString(qs)}, true
 	}
 	return DML{}, false
 }
 
-func normalizeIdent(s string) string {
-	// Strip trailing commas/aliases if present; keep schema qualification.
+func normalizeIdentifier(s string) string {
+	// Strip trailing commas/aliases if present; keep schema qualification and quotes.
 	s = strings.TrimSpace(s)
-	// Remove alias after table name: "public.orders o" -> "public.orders"
-	parts := strings.Fields(s)
-	if len(parts) > 0 {
-		return strings.Trim(parts[0], `"`)
+	s = strings.TrimRight(s, ",")
+	inQuotes := false
+	for i := 0; i < len(s); i++ {
+		r := rune(s[i])
+		if r == '"' {
+			inQuotes = !inQuotes
+			continue
+		}
+		if !inQuotes && unicode.IsSpace(r) {
+			return strings.TrimSpace(s[:i])
+		}
 	}
 	return s
 }

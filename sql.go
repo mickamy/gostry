@@ -21,8 +21,8 @@ func (r affectedResult) RowsAffected() (int64, error) {
 	return r.n, nil
 }
 
-// scanOne consumes exactly one row from *sql.Rows into a map.
-func scanOne(rows *sql.Rows) (map[string]any, int, error) {
+// scanAll consumes all rows from *sql.Rows and returns them as slice of maps.
+func scanAll(rows *sql.Rows) ([]map[string]any, int, error) {
 	defer func(rows *sql.Rows) {
 		_ = rows.Close()
 	}(rows)
@@ -31,18 +31,25 @@ func scanOne(rows *sql.Rows) (map[string]any, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if !rows.Next() {
-		return nil, 0, sql.ErrNoRows
+	var out []map[string]any
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, 0, err
+		}
+		out = append(out, rowToMap(cols, vals))
 	}
-	vals := make([]any, len(cols))
-	ptrs := make([]any, len(cols))
-	for i := range vals {
-		ptrs[i] = &vals[i]
-	}
-	if err := rows.Scan(ptrs...); err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, 0, err
 	}
-	return rowToMap(cols, vals), 1, nil
+	if len(out) == 0 {
+		return nil, 0, sql.ErrNoRows
+	}
+	return out, len(out), nil
 }
 
 // rowToMap converts a single row (columns + values) to a map.

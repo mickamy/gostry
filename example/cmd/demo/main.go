@@ -59,13 +59,24 @@ VALUES ($1,$2,$3,$4)
 		log.Fatalf("insert: %v", err)
 	}
 
-	// UPDATE with RETURNING * (captured as after)
+	// UPDATE without RETURNING (auto-attachment kicks in when enabled)
 	if _, err := tx.ExecContext(ctx, `
 UPDATE orders SET status=$1, amount=$2, updated_at=now()
 WHERE id=$3
 `, "paid", 1500.00, id); err != nil {
 		_ = tx.Rollback()
 		log.Fatalf("update: %v", err)
+	}
+
+	// INSERT ... ON CONFLICT ... without explicit RETURNING
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO orders(id, customer_id, amount, status)
+VALUES ($1,$2,$3,$4)
+ON CONFLICT (id)
+DO UPDATE SET status=$5, amount=$6, updated_at=now()
+`, id, uuid.NewString(), 1750.00, "pending", "refunded", 1750.00); err != nil {
+		_ = tx.Rollback()
+		log.Fatalf("upsert: %v", err)
 	}
 
 	// DELETE with RETURNING * (captured as before)

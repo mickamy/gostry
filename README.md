@@ -8,7 +8,7 @@ configurable history tables inside the same transaction.
 
 - Safe wrapper around `*sql.Tx` that buffers DML metadata and flushes to history tables on commit.
 - Row snapshots for `INSERT`, `UPDATE`, and `DELETE` when `RETURNING` clauses are present, with optional auto-attachment
-  of `RETURNING *`.
+  of `RETURNING *`. (Best-effort: complex constructs like `ON CONFLICT` or multi-statement batches are left untouched.)
 - Pluggable redaction hooks to mask sensitive columns before they are persisted.
 - Schema-aware identifier handling, including quoted names and custom schema prefixes.
 

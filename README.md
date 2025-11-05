@@ -91,7 +91,21 @@ func main() {
 `gostry.WithOperator`, `gostry.WithTraceID`, and `gostry.WithReason` attach contextual metadata to a `context.Context`.
 These fields are propagated into history rows for auditing.
 
-To bypass capture for a specific call chain, wrap the context with `gostry.WithSkip(ctx)` before executing a statement.
+To bypass capture for a specific call chain, wrap the context with `gostry.WithSkip(ctx)` before executing a statement. A
+common pattern is skipping one-off maintenance jobs:
+
+```go
+ctx := gostry.WithOperator(context.Background(), "maintenance")
+tx, _ := wrapped.BeginTx(ctx, nil)
+
+// Skip archival cleanup
+skipCtx := gostry.WithSkip(ctx)
+_ = tx.ExecContext(skipCtx, `DELETE FROM session_tokens WHERE expires_at < now()`)
+
+// Resume normal audited work
+_ = tx.ExecContext(ctx, `UPDATE orders SET status=$1 WHERE id=$2`, "holding", id)
+_ = tx.Commit()
+```
 
 ## Schema helper
 

@@ -79,6 +79,13 @@ DO UPDATE SET status=$5, amount=$6, updated_at=now()
 		log.Fatalf("upsert: %v", err)
 	}
 
+	// Maintenance job we do not want to audit
+	skipCtx := gostry.WithSkip(ctx)
+	if _, err := tx.ExecContext(skipCtx, `DELETE FROM orders WHERE status = $1`, "pending"); err != nil {
+		_ = tx.Rollback()
+		log.Fatalf("maintenance delete: %v", err)
+	}
+
 	// DELETE with RETURNING * (captured as before)
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM orders WHERE id=$1
@@ -96,7 +103,7 @@ DELETE FROM orders WHERE id=$1
 	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM orders_history`).Scan(&cnt); err != nil {
 		log.Fatalf("count history: %v", err)
 	}
-	fmt.Printf("history rows = %d (expected >= 3)\n", cnt)
+	fmt.Printf("history rows = %d (expected >= 4)\n", cnt)
 }
 
 func getenv(k, def string) string {

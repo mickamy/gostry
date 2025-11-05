@@ -66,7 +66,7 @@ DELETE FROM orders WHERE id=$1
 		log.Fatalf("delete: %v", err)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
+	if err := tx.CommitContext(ctx); err != nil {
 		log.Fatalf("commit: %v", err)
 	}
 

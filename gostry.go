@@ -84,6 +84,7 @@ type Tx struct {
 	*sql.Tx
 	h   *Handler
 	buf *buffer.Buffer[entry]
+	ctx context.Context
 }
 
 // BeginTx starts a wrapped transaction that records DML changes.
@@ -92,7 +93,7 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Tx{Tx: tx, h: db.h, buf: buffer.NewBuffer[entry]()}, nil
+	return &Tx{Tx: tx, h: db.h, buf: buffer.NewBuffer[entry](), ctx: ctx}, nil
 }
 
 // ExecContext intercepts ExecContext to capture and log DML operations.
@@ -100,6 +101,7 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // - If the statement is INSERT/UPDATE/DELETE with RETURNING, capture row(s) as after/before.
 // - Otherwise, pass-through and record only SQL/args metadata for later (future resolvers).
 func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
+	tx.ctx = ctx
 	if dml, ok := query.ParseDML(q); ok {
 		execPlain := func() (sql.Result, error) {
 			res, err := tx.Tx.ExecContext(ctx, q, args...)
@@ -152,8 +154,13 @@ func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Resul
 	return tx.Tx.ExecContext(ctx, q, args...)
 }
 
-// Commit flushes buffered history records into history tables before commit.
-func (tx *Tx) Commit(ctx context.Context) error {
+// Commit reuses the most recent context captured during Exec/Commit calls.
+func (tx *Tx) Commit() error {
+	return tx.CommitContext(tx.ctx)
+}
+
+// CommitContext flushes buffered history records into history tables before commit.
+func (tx *Tx) CommitContext(ctx context.Context) error {
 	if err := tx.flush(ctx); err != nil {
 		return err
 	}

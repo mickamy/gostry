@@ -60,7 +60,7 @@ func main() {
 		return
 	}
 
-	_ = tx.Commit(ctx)
+	_ = tx.CommitContext(ctx)
 }
 ```
 

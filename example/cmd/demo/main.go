@@ -24,9 +24,13 @@ func main() {
 		_ = db.Close()
 	}(db)
 
+	// Migrate
+	if err := gostry.Migrate(context.Background(), db, gostry.SchemaConfig{CreateIDIndex: true}, "orders"); err != nil {
+		log.Fatalf("gostry.Migrate: %v", err)
+	}
+
 	// Wrap DB with gostry
-	h := gostry.New(gostry.Config{AutoAttachReturning: true})
-	wdb := h.Wrap(db)
+	wdb := gostry.New(gostry.Config{AutoAttachReturning: true}).Wrap(db)
 
 	// Metadata
 	ctx := gostry.WithOperator(context.Background(), "demo-user")

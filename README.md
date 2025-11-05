@@ -35,6 +35,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"log"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/mickamy/gostry"
@@ -43,6 +44,11 @@ import (
 func main() {
 	db, _ := sql.Open("pgx", "postgres://user:pass@localhost:5432/db?sslmode=disable")
 	defer db.Close()
+
+	// Migrate
+	if err := gostry.Migrate(context.Background(), db, gostry.SchemaConfig{CreateIDIndex: true}, "orders"); err != nil {
+		log.Fatalf("gostry.Migrate: %v", err)
+	}
 
 	handler := gostry.New(gostry.Config{
 		HistorySuffix:       "_history",
@@ -71,12 +77,26 @@ func main() {
 | `HistorySuffix`       | `_history` | Suffix appended to base table names when deriving history tables (schema is preserved).                                                                 |
 | `Redact`              | `nil`      | Optional map of column name → redaction function executed before values are stored.                                                                     |
 | `SkipIfNotExists`     | `false`    | Guards history inserts with `to_regclass(...)` so missing history tables do not fail the transaction.                                                   |
-| `AutoAttachReturning` | `false`    | When enabled, attempts to append `RETURNING *` to matching DML that lack it, allowing row snapshots without changing application SQL (PostgreSQL only). |
+| `AutoAttachReturning` | `false`    | Attempts to append `RETURNING *` to matching DML that lack it so row snapshots are still captured (PostgreSQL only).                                      |
 
 ### Metadata helpers
 
 `gostry.WithOperator`, `gostry.WithTraceID`, and `gostry.WithReason` attach contextual metadata to a `context.Context`.
 These fields are propagated into history rows for auditing.
+
+## Schema helper
+
+`CreateHistoryTables` assists with bootstrapping history tables from existing base tables:
+
+```go
+cfg := gostry.SchemaConfig{HistorySuffix: "_history", CreateIDIndex: true}
+if err := gostry.CreateHistoryTables(ctx, db, cfg, "public.orders", "users"); err != nil {
+	log.Fatal(err)
+}
+```
+
+`SchemaConfig` mirrors the naming defaults used by the runtime handler, and `CreateIDIndex` optionally adds a simple `id`
+index to each generated history table.
 
 ### History table schema
 

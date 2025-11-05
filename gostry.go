@@ -83,7 +83,6 @@ type Tx struct {
 	*sql.Tx
 	h   *Handler
 	buf *buffer.Buffer[entry]
-	ctx context.Context
 }
 
 // BeginTx starts a wrapped transaction that records DML changes.
@@ -92,7 +91,7 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Tx{Tx: tx, h: db.h, buf: buffer.NewBuffer[entry](), ctx: ctx}, nil
+	return &Tx{Tx: tx, h: db.h, buf: buffer.NewBuffer[entry]()}, nil
 }
 
 // ExecContext intercepts ExecContext to capture and log DML operations.
@@ -136,15 +135,15 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 }
 
 // Commit flushes buffered history records into history tables before commit.
-func (t *Tx) Commit() error {
-	if err := t.flush(); err != nil {
+func (t *Tx) Commit(ctx context.Context) error {
+	if err := t.flush(ctx); err != nil {
 		return err
 	}
 	return t.Tx.Commit()
 }
 
 // flush writes buffered entries into their corresponding history tables within the same transaction.
-func (t *Tx) flush() error {
+func (t *Tx) flush(ctx context.Context) error {
 	rows := t.buf.Drain()
 	if len(rows) == 0 {
 		return nil
@@ -187,7 +186,7 @@ END $$;
 		}
 
 		if _, err := t.Tx.ExecContext(
-			t.ctx,
+			ctx,
 			stmt,
 			id,
 			e.op,

@@ -68,7 +68,7 @@ DELETE FROM orders WHERE id=$1 RETURNING *
 		log.Fatalf("delete: %v", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		log.Fatalf("commit: %v", err)
 	}
 

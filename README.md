@@ -84,11 +84,14 @@ func main() {
 | `Redact`              | `nil`      | Optional map of column name → redaction function executed before values are stored.                                                                     |
 | `SkipIfNotExists`     | `false`    | Guards history inserts with `to_regclass(...)` so missing history tables do not fail the transaction.                                                   |
 | `AutoAttachReturning` | `false`    | Attempts to append `RETURNING *` to matching DML that lack it so row snapshots are still captured (PostgreSQL only).                                      |
+| `Skip`                | `nil`      | Optional `SkipFunc` hook to bypass capture for matching operations (e.g., specific tables/operators).                                                    |
 
 ### Metadata helpers
 
 `gostry.WithOperator`, `gostry.WithTraceID`, and `gostry.WithReason` attach contextual metadata to a `context.Context`.
 These fields are propagated into history rows for auditing.
+
+To bypass capture for a specific call chain, wrap the context with `gostry.WithSkip(ctx)` before executing a statement.
 
 ## Schema helper
 

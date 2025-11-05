@@ -20,12 +20,16 @@ type RedactFunc func(key string, v any) any
 // RedactMap maps key names to specific redaction functions.
 type RedactMap map[string]RedactFunc
 
+// SkipFunc returns true when a DML statement should bypass gostry capture.
+type SkipFunc func(ctx context.Context, dml query.DML, rawSQL string, args []any) bool
+
 // Config defines the main configuration options for gostry.
 type Config struct {
 	HistorySuffix       string    // e.g. "_history" (default)
 	Redact              RedactMap // optional key-based redaction
 	SkipIfNotExists     bool      // skip insertion to history table if it does not exists
 	AutoAttachReturning bool      // attempt to append RETURNING * for DML without RETURNING (PostgreSQL only)
+	Skip                SkipFunc  // optional predicate to skip capturing for matching statements
 }
 
 func (c Config) HistoryTableName(base string) string {
@@ -102,13 +106,14 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // - Otherwise, pass-through and record only SQL/args metadata for later (future resolvers).
 func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	tx.ctx = ctx
+	if extractSkip(ctx) {
+		return tx.Tx.ExecContext(ctx, q, args...)
+	}
 	if dml, ok := query.ParseDML(q); ok {
-		execPlain := func() (sql.Result, error) {
-			res, err := tx.Tx.ExecContext(ctx, q, args...)
-			if err == nil {
-				tx.buf.Add(entry{table: dml.Table, op: dml.Op, sql: q, args: args, meta: extractMeta(ctx)})
+		if tx.h.cfg.Skip != nil {
+			if tx.h.cfg.Skip(ctx, dml, q, args) {
+				return tx.Tx.ExecContext(ctx, q, args...)
 			}
-			return res, err
 		}
 
 		stmt := q
@@ -123,16 +128,10 @@ func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Resul
 		if dml.HasReturning || forcedReturning {
 			rows, err := tx.Tx.QueryContext(ctx, stmt, args...)
 			if err != nil {
-				if forcedReturning {
-					return execPlain()
-				}
 				return nil, err
 			}
 			ms, n, err := scanAll(rows)
 			if err != nil {
-				if forcedReturning {
-					return execPlain()
-				}
 				return nil, fmt.Errorf("gostry: failed to scan rows: %w", err)
 			}
 			meta := extractMeta(ctx)
@@ -148,7 +147,11 @@ func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Resul
 			return newAffectedRows(n), nil
 		}
 
-		return execPlain()
+		res, err := tx.Tx.ExecContext(ctx, q, args...)
+		if err == nil {
+			tx.buf.Add(entry{table: dml.Table, op: dml.Op, sql: q, args: args, meta: extractMeta(ctx)})
+		}
+		return res, err
 	}
 	// Not a recognized DML; just pass-through.
 	return tx.Tx.ExecContext(ctx, q, args...)

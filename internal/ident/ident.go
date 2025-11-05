@@ -1,12 +1,10 @@
-package gostry
+package ident
 
-import (
-	"strings"
-)
+import "strings"
 
-// historyIdentifierParts returns qualified identifier parts with history suffix applied.
-func historyIdentifierParts(base, suffix string) []string {
-	parts := splitQualifiedIdentifier(base)
+// HistoryParts returns qualified identifier parts with suffix applied to the base table name.
+func HistoryParts(base, suffix string) []string {
+	parts := SplitQualified(base)
 	if len(parts) == 0 {
 		if suffix == "" {
 			return nil
@@ -19,8 +17,8 @@ func historyIdentifierParts(base, suffix string) []string {
 	return out
 }
 
-// splitQualifiedIdentifier splits a potentially schema-qualified identifier into its parts.
-func splitQualifiedIdentifier(ident string) []string {
+// SplitQualified splits a potentially schema-qualified identifier into its parts.
+func SplitQualified(ident string) []string {
 	ident = strings.TrimSpace(ident)
 	if ident == "" {
 		return nil
@@ -56,34 +54,35 @@ func splitQualifiedIdentifier(ident string) []string {
 	return parts
 }
 
-// quoteQualifiedIdentifier renders qualified identifier parts as a SQL identifier.
-func quoteQualifiedIdentifier(parts []string) string {
+// QuoteQualified renders qualified identifier parts as a SQL identifier.
+func QuoteQualified(parts []string) string {
 	if len(parts) == 0 {
 		return ""
 	}
 	quoted := make([]string, len(parts))
 	for i, p := range parts {
-		quoted[i] = quoteIdentifier(p)
+		quoted[i] = Quote(p)
 	}
 	return strings.Join(quoted, ".")
 }
 
-func quoteIdentifier(part string) string {
+// Quote safely quotes a single identifier part.
+func Quote(part string) string {
 	return `"` + strings.ReplaceAll(part, `"`, `""`) + `"`
 }
 
-// qualifiedRegclassLiteral produces a regclass literal (e.g. 'public.table') with proper quoting.
-func qualifiedRegclassLiteral(parts []string) string {
+// QualifiedRegclassLiteral produces a regclass literal (e.g. 'public.table') with proper quoting.
+func QualifiedRegclassLiteral(parts []string) string {
 	if len(parts) == 0 {
 		return "''"
 	}
-	ident := quoteQualifiedIdentifier(parts)
+	ident := QuoteQualified(parts)
 	return "'" + strings.ReplaceAll(ident, "'", "''") + "'"
 }
 
-// baseTableName returns the last segment of a qualified identifier.
-func baseTableName(ident string) string {
-	parts := splitQualifiedIdentifier(ident)
+// BaseTableName returns the last segment of a qualified identifier.
+func BaseTableName(ident string) string {
+	parts := SplitQualified(ident)
 	if len(parts) == 0 {
 		return strings.TrimSpace(ident)
 	}

@@ -1,11 +1,13 @@
-package gostry
+package ident_test
 
 import (
-	"reflect"
+	"slices"
 	"testing"
+
+	"github.com/mickamy/gostry/internal/ident"
 )
 
-func TestSplitQualifiedIdentifier(t *testing.T) {
+func TestSplitQualified(t *testing.T) {
 	t.Parallel()
 
 	tcs := []struct {
@@ -24,16 +26,15 @@ func TestSplitQualifiedIdentifier(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := splitQualifiedIdentifier(tc.in)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("splitQualifiedIdentifier(%q) = %#v, want %#v", tc.in, got, tc.want)
+			got := ident.SplitQualified(tc.in)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("SplitQualified(%q) = %#v, want %#v", tc.in, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestHistoryIdentifierParts(t *testing.T) {
+func TestHistoryParts(t *testing.T) {
 	t.Parallel()
 
 	tcs := []struct {
@@ -47,20 +48,20 @@ func TestHistoryIdentifierParts(t *testing.T) {
 		{name: "empty base", base: "", suffix: "_history", want: []string{"_history"}},
 		{name: "quoted", base: `"Sales"."Orders"`, suffix: "_history", want: []string{"Sales", "Orders_history"}},
 	}
+
 	for _, tc := range tcs {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := historyIdentifierParts(tc.base, tc.suffix)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("historyIdentifierParts(%q,%q) = %#v, want %#v", tc.base, tc.suffix, got, tc.want)
+			got := ident.HistoryParts(tc.base, tc.suffix)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("HistoryParts(%q,%q) = %#v, want %#v", tc.base, tc.suffix, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestQuoteQualifiedIdentifier(t *testing.T) {
+func TestQuoteQualified(t *testing.T) {
 	t.Parallel()
 
 	tcs := []struct {
@@ -72,14 +73,14 @@ func TestQuoteQualifiedIdentifier(t *testing.T) {
 		{name: "schema qualified", in: []string{"public", "orders_history"}, want: `"public"."orders_history"`},
 		{name: "needs escaping", in: []string{`Order"Detail`}, want: `"Order""Detail"`},
 	}
+
 	for _, tc := range tcs {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := quoteQualifiedIdentifier(tc.in)
+			got := ident.QuoteQualified(tc.in)
 			if got != tc.want {
-				t.Fatalf("quoteQualifiedIdentifier(%#v) = %q, want %q", tc.in, got, tc.want)
+				t.Fatalf("QuoteQualified(%#v) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -97,14 +98,14 @@ func TestQualifiedRegclassLiteral(t *testing.T) {
 		{name: "schema qualified", in: []string{"public", "orders_history"}, want: `'"public"."orders_history"'`},
 		{name: "empty", in: nil, want: `''`},
 	}
+
 	for _, tc := range tcs {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := qualifiedRegclassLiteral(tc.in)
+			got := ident.QualifiedRegclassLiteral(tc.in)
 			if got != tc.want {
-				t.Fatalf("qualifiedRegclassLiteral(%#v) = %q, want %q", tc.in, got, tc.want)
+				t.Fatalf("QualifiedRegclassLiteral(%#v) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -123,14 +124,14 @@ func TestBaseTableName(t *testing.T) {
 		{name: "quoted", in: `"Sales"."Orders"`, want: "Orders"},
 		{name: "dot in quotes", in: `"Sales"."Order.Detail"`, want: "Order.Detail"},
 	}
+
 	for _, tc := range tcs {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := baseTableName(tc.in)
+			got := ident.BaseTableName(tc.in)
 			if got != tc.want {
-				t.Fatalf("baseTableName(%q) = %q, want %q", tc.in, got, tc.want)
+				t.Fatalf("BaseTableName(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

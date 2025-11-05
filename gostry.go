@@ -10,6 +10,7 @@ import (
 	"github.com/jinzhu/inflection"
 
 	"github.com/mickamy/gostry/internal/buffer"
+	"github.com/mickamy/gostry/internal/ident"
 	"github.com/mickamy/gostry/internal/query"
 )
 
@@ -27,7 +28,7 @@ type Config struct {
 }
 
 func (c Config) HistoryTableName(base string) string {
-	parts := historyIdentifierParts(base, c.HistorySuffix)
+	parts := ident.HistoryParts(base, c.HistorySuffix)
 	if len(parts) == 0 {
 		return ""
 	}
@@ -163,8 +164,8 @@ func (t *tx) flush() error {
 		}
 
 		// Simple per-row INSERT for MVP; can be batched later.
-		historyParts := historyIdentifierParts(e.table, t.h.cfg.HistorySuffix)
-		historyIdent := quoteQualifiedIdentifier(historyParts)
+		historyParts := ident.HistoryParts(e.table, t.h.cfg.HistorySuffix)
+		historyIdent := ident.QuoteQualified(historyParts)
 		if historyIdent == "" {
 			return fmt.Errorf("gostry: invalid history table identifier for %q", e.table)
 		}
@@ -173,7 +174,7 @@ INSERT INTO %s (id, operation, operated_at, operated_by, trace_id, reason, befor
 VALUES ($1, $2, now(), $3, $4, $5, $6, $7)
 `, historyIdent)
 		if t.h.cfg.SkipIfNotExists {
-			regclass := qualifiedRegclassLiteral(historyParts)
+			regclass := ident.QualifiedRegclassLiteral(historyParts)
 			stmt = fmt.Sprintf(`
 DO $$
 BEGIN
@@ -217,7 +218,7 @@ func pickID(table string, before, after map[string]any) any {
 	if v, ok := after["id"]; ok {
 		return v
 	}
-	base := baseTableName(table)
+	base := ident.BaseTableName(table)
 	singular := inflection.Singular(base)
 	singularID := fmt.Sprintf("%s_id", singular)
 	if v, ok := before[singularID]; ok {

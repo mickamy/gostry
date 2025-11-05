@@ -15,8 +15,8 @@ type DML struct {
 
 var (
 	reInsert    = regexp.MustCompile(`(?is)^\s*(?:with\b.*?\)\s*)?insert\s+into\s+([^\s(]+)`)
-	reUpdate    = regexp.MustCompile(`(?is)^\s*(?:with\b.*?\)\s*)?update\s+([^\s]+)\s+set\b`)
-	reDelete    = regexp.MustCompile(`(?is)^\s*(?:with\b.*?\)\s*)?delete\s+from\s+([^\s]+)`)
+	reUpdate    = regexp.MustCompile(`(?is)^\s*(?:with\b.*?\)\s*)?update\s+([^\s]+(?:\s+(?:as\s+)?[^\s]+)?)\s+set\b`)
+	reDelete    = regexp.MustCompile(`(?is)^\s*(?:with\b.*?\)\s*)?delete\s+from\s+([^\s]+(?:\s+(?:as\s+)?[^\s]+)?)`)
 	reReturning = regexp.MustCompile(`(?is)\breturning\b`)
 )
 

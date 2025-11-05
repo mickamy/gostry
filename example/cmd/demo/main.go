@@ -26,7 +26,7 @@ func main() {
 
 	// Wrap DB with gostry
 	h := gostry.New(gostry.Config{HistorySuffix: "_history"})
-	wdb := h.WrapDB(db)
+	wdb := h.Wrap(db)
 
 	// Metadata
 	ctx := gostry.WithOperator(context.Background(), "demo-user")

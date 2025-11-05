@@ -57,8 +57,8 @@ type DB struct {
 	h *Handler
 }
 
-// WrapDB attaches gostry to a *sql.DB connection.
-func (h *Handler) WrapDB(db *sql.DB) *DB {
+// Wrap attaches gostry to a *sql.DB connection.
+func (h *Handler) Wrap(db *sql.DB) *DB {
 	return &DB{DB: db, h: h}
 }
 

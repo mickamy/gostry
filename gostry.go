@@ -98,18 +98,18 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // MVP behavior:
 // - If the statement is INSERT/UPDATE/DELETE with RETURNING, capture row(s) as after/before.
 // - Otherwise, pass-through and record only SQL/args metadata for later (future resolvers).
-func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
+func (tx *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error) {
 	if dml, ok := query.ParseDML(q); ok {
 		if !dml.HasReturning {
 			// No RETURNING: pass-through; record minimal info.
-			res, err := t.Tx.ExecContext(ctx, q, args...)
+			res, err := tx.Tx.ExecContext(ctx, q, args...)
 			if err == nil {
-				t.buf.Add(entry{table: dml.Table, op: dml.Op, sql: q, args: args, meta: extractMeta(ctx)})
+				tx.buf.Add(entry{table: dml.Table, op: dml.Op, sql: q, args: args, meta: extractMeta(ctx)})
 			}
 			return res, err
 		}
 		// Use QueryContext to fetch returned row(s); we only capture the first row for MVP.
-		rows, err := t.Tx.QueryContext(ctx, q, args...)
+		rows, err := tx.Tx.QueryContext(ctx, q, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -125,33 +125,33 @@ func (t *Tx) ExecContext(ctx context.Context, q string, args ...any) (sql.Result
 			} else {
 				e.after = m
 			}
-			t.buf.Add(e)
+			tx.buf.Add(e)
 		}
 		return newAffectedRows(n), nil
 
 	}
 	// Not a recognized DML; just pass-through.
-	return t.Tx.ExecContext(ctx, q, args...)
+	return tx.Tx.ExecContext(ctx, q, args...)
 }
 
 // Commit flushes buffered history records into history tables before commit.
-func (t *Tx) Commit(ctx context.Context) error {
-	if err := t.flush(ctx); err != nil {
+func (tx *Tx) Commit(ctx context.Context) error {
+	if err := tx.flush(ctx); err != nil {
 		return err
 	}
-	return t.Tx.Commit()
+	return tx.Tx.Commit()
 }
 
 // flush writes buffered entries into their corresponding history tables within the same transaction.
-func (t *Tx) flush(ctx context.Context) error {
-	rows := t.buf.Drain()
+func (tx *Tx) flush(ctx context.Context) error {
+	rows := tx.buf.Drain()
 	if len(rows) == 0 {
 		return nil
 	}
 
 	for _, e := range rows {
-		before := t.h.applyRedact(e.before)
-		after := t.h.applyRedact(e.after)
+		before := tx.h.applyRedact(e.before)
+		after := tx.h.applyRedact(e.after)
 		id := pickID(e.table, before, after)
 		beforeJSON, err := json.Marshal(before)
 		if err != nil {
@@ -163,7 +163,7 @@ func (t *Tx) flush(ctx context.Context) error {
 		}
 
 		// Simple per-row INSERT for MVP; can be batched later.
-		historyParts := ident.HistoryParts(e.table, t.h.cfg.HistorySuffix)
+		historyParts := ident.HistoryParts(e.table, tx.h.cfg.HistorySuffix)
 		historyIdent := ident.QuoteQualified(historyParts)
 		if historyIdent == "" {
 			return fmt.Errorf("gostry: invalid history table identifier for %q", e.table)
@@ -172,7 +172,7 @@ func (t *Tx) flush(ctx context.Context) error {
 INSERT INTO %s (id, operation, operated_at, operated_by, trace_id, reason, before, after)
 VALUES ($1, $2, now(), $3, $4, $5, $6, $7)
 `, historyIdent)
-		if t.h.cfg.SkipIfNotExists {
+		if tx.h.cfg.SkipIfNotExists {
 			regclass := ident.QualifiedRegclassLiteral(historyParts)
 			stmt = fmt.Sprintf(`
 DO $$
@@ -185,7 +185,7 @@ END $$;
 `, regclass, historyIdent)
 		}
 
-		if _, err := t.Tx.ExecContext(
+		if _, err := tx.Tx.ExecContext(
 			ctx,
 			stmt,
 			id,
@@ -203,9 +203,9 @@ END $$;
 }
 
 // Rollback clears buffered history entries and rolls back the transaction.
-func (t *Tx) Rollback() error {
-	t.buf.Reset()
-	return t.Tx.Rollback()
+func (tx *Tx) Rollback() error {
+	tx.buf.Reset()
+	return tx.Tx.Rollback()
 }
 
 // pickID attempts to choose a sensible primary key from before/after maps.

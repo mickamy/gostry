@@ -41,12 +41,18 @@ import (
 	"github.com/mickamy/gostry"
 )
 
+type Order struct{}
+
+type OrderItem struct{}
+
+func (OrderItem) TableName() string { return "order_items" }
+
 func main() {
 	db, _ := sql.Open("pgx", "postgres://user:pass@localhost:5432/db?sslmode=disable")
 	defer db.Close()
 
 	// Migrate
-	if err := gostry.Migrate(context.Background(), db, gostry.SchemaConfig{CreateIDIndex: true}, "orders"); err != nil {
+	if err := gostry.Migrate(context.Background(), db, gostry.SchemaConfig{CreateIDIndex: true}, Order{}, OrderItem{}, "payments"); err != nil {
 		log.Fatalf("gostry.Migrate: %v", err)
 	}
 
@@ -86,17 +92,27 @@ These fields are propagated into history rows for auditing.
 
 ## Schema helper
 
-`CreateHistoryTables` assists with bootstrapping history tables from existing base tables:
+`Migrate` assists with bootstrapping history tables from existing base tables or Go types:
 
 ```go
 cfg := gostry.SchemaConfig{HistorySuffix: "_history", CreateIDIndex: true}
-if err := gostry.CreateHistoryTables(ctx, db, cfg, "public.orders", "users"); err != nil {
-	log.Fatal(err)
+if err := gostry.Migrate(ctx, db, cfg, "public.orders", "users"); err != nil {
+    log.Fatal(err)
 }
 ```
 
 `SchemaConfig` mirrors the naming defaults used by the runtime handler, and `CreateIDIndex` optionally adds a simple `id`
-index to each generated history table.
+index to each generated history table. When working with Go structs, `Migrate` resolves table names using reflection:
+
+```go
+type Order struct{}
+
+func (Order) TableName() string { return "sales.orders" }
+
+if err := gostry.Migrate(ctx, db, cfg, Order{}, "audit_logs"); err != nil {
+    log.Fatal(err)
+}
+```
 
 ### History table schema
 

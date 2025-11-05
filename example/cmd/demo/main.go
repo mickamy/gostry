@@ -13,6 +13,12 @@ import (
 	"github.com/mickamy/gostry"
 )
 
+type Order struct{}
+
+type OrderItem struct{}
+
+func (OrderItem) TableName() string { return "order_items" }
+
 func main() {
 	dsn := getenv("DATABASE_URL", "postgres://root:password@localhost:5432/gostry?sslmode=disable")
 
@@ -25,7 +31,7 @@ func main() {
 	}(db)
 
 	// Migrate
-	if err := gostry.Migrate(context.Background(), db, gostry.SchemaConfig{CreateIDIndex: true}, "orders"); err != nil {
+	if err := gostry.Migrate(context.Background(), db, gostry.SchemaConfig{CreateIDIndex: true}, Order{}, OrderItem{}, "payments"); err != nil {
 		log.Fatalf("gostry.Migrate: %v", err)
 	}
 
